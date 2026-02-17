@@ -1,75 +1,44 @@
-def infer_posttax_income_batched(df, pre_col, post_col, curr_col, meta_prefix, batch_size=30, min_window=75):
+def generate_tax_inference_remarks(df, pre_col, post_col, curr_col, meta_prefix):
     """
-    Fills missing post-tax values ONLY if the group has partial post-tax data.
-    Captures full metadata: Tax Paid, Rate, Source, and URL.
+    Generates succinct audit remarks for both Pre-tax (Gross-up) 
+    and Post-tax (Net-down) inferences.
     """
     df_copy = df.copy()
-    group_cols = ['Parent_employer_name', 'Subsidary_employer_name', 'Designation', 'Country']
     
-    # Mirroring the metadata fields from the pre-tax function
-    meta_map = {
-        'paid': f'{meta_prefix}_Tax_Paid',
-        'rate': f'{meta_prefix}_Tax_Rate',
-        'url': f'{meta_prefix}_Tax_URL',
-        'desc': f'{meta_prefix}_Tax_Source_Desc'
-    }
+    # Pre-tax Inference Metadata (Gross-up)
+    m_pre_rate = f'{meta_prefix}_Tax_Rate'
+    m_pre_url = f'{meta_prefix}_Tax_URL'
+    m_pre_desc = f'{meta_prefix}_Tax_Source_Desc'
     
-    for col in meta_map.values():
-        if col not in df_copy.columns:
-            df_copy[col] = np.nan
+    # Post-tax Inference Metadata (Net-down)
+    m_post_rate = f'{meta_prefix}_PostTax_Rate'
+    m_post_url = f'{meta_prefix}_PostTax_URL'
+    m_post_desc = f'{meta_prefix}_PostTax_Source_Desc'
+    
+    remark_col = f'{meta_prefix}_Tax_Inference_Remarks'
 
-    # 1. Targeted Group Check: Only fill gaps in groups that already have some post-tax data
-    group_presence = df_copy.groupby(group_cols)[post_col].transform(lambda x: x.notnull().any())
-    
-    # 2. Identify indices: (In a partial group) AND (Post-tax is NaN) AND (Pre-tax is present)
-    target_indices = df_copy[
-        (group_presence == True) & 
-        (df_copy[post_col].isnull()) & 
-        (df_copy[pre_col].notnull())
-    ].index.tolist()
-    
-    if not target_indices:
-        print(f"No partial post-tax gaps found for {meta_prefix}.")
-        return df_copy
-
-    print(f"Filling {len(target_indices)} post-tax gaps for {meta_prefix} using Gemini...")
-
-    for i in range(0, len(target_indices), batch_size):
-        batch_start_time = time.time()
-        current_batch_indices = target_indices[i:i + batch_size]
+    def construct_statement(row):
+        currency = row[curr_col]
         
-        def worker(idx):
-            row = df_copy.loc[idx]
-            query = {
-                "claim_id": f"row_{idx}_net_infer",
-                "country": row['Country'],
-                "currency": row[curr_col],
-                "claimed_pre-tax_annual_compensation": row[pre_col]
-            }
-            # Calling your specific Gemini function for net income
-            return posttax_from_pretax(query)
+        # Scenario 1: Pre-tax was inferred from Post-tax
+        if pd.notnull(row.get(m_pre_rate)):
+            rate = row[m_pre_rate] * 100
+            source = row[m_pre_desc]
+            url = row[m_pre_url]
+            return (f"Income during tenure was reported as {currency} {row[post_col]:,.2f} (post-tax) "
+                    f"which is converted to its pre-tax equivalent ({currency} {row[pre_col]:,.2f}) "
+                    f"applying a {rate:.2f}% tax rate sourced from {source} ({url}).")
 
-        with ThreadPoolExecutor(max_workers=batch_size) as executor:
-            future_to_index = {executor.submit(worker, idx): idx for idx in current_batch_indices}
-            
-            for future in future_to_index:
-                idx = future_to_index[future]
-                try:
-                    response = future.result()
-                    # Mapping identical fields to the Pre-Tax results
-                    df_copy.at[idx, post_col] = response.get("estimated_post_tax_compensation")
-                    df_copy.at[idx, meta_map['paid']] = response.get("estimaed_tax_paid")
-                    df_copy.at[idx, meta_map['rate']] = response.get("tax_rate")
-                    df_copy.at[idx, meta_map['desc']] = response.get("source_description")
-                    df_copy.at[idx, meta_map['url']] = response.get("source_url")
-                except Exception as e:
-                    print(f"Gemini Error at index {idx}: {e}")
+        # Scenario 2: Post-tax was inferred from Pre-tax
+        elif pd.notnull(row.get(m_post_rate)):
+            rate = row[m_post_rate] * 100
+            source = row[m_post_desc]
+            url = row[m_post_url]
+            return (f"Income during tenure was reported as {currency} {row[pre_col]:,.2f} (pre-tax) "
+                    f"which is converted to its post-tax equivalent ({currency} {row[post_col]:,.2f}) "
+                    f"applying a {rate:.2f}% tax rate sourced from {source} ({url}).")
+        
+        return np.nan
 
-        # Rate Limit Drift Logic
-        elapsed_time = time.time() - batch_start_time
-        if i + batch_size < len(target_indices):
-            wait_time = max(0, min_window - elapsed_time)
-            if wait_time > 0:
-                time.sleep(wait_time)
-
+    df_copy[remark_col] = df_copy.apply(construct_statement, axis=1)
     return df_copy
