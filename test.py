@@ -1,44 +1,68 @@
-def generate_tax_inference_remarks(df, pre_col, post_col, curr_col, meta_prefix):
+import pandas as pd
+import numpy as np
+
+def generate_final_summary(df):
     """
-    Generates succinct audit remarks for both Pre-tax (Gross-up) 
-    and Post-tax (Net-down) inferences.
+    Groups data by employer and consolidates financial totals with 
+    a chronologically interwoven narrative of audit remarks.
     """
     df_copy = df.copy()
     
-    # Pre-tax Inference Metadata (Gross-up)
-    m_pre_rate = f'{meta_prefix}_Tax_Rate'
-    m_pre_url = f'{meta_prefix}_Tax_URL'
-    m_pre_desc = f'{meta_prefix}_Tax_Source_Desc'
+    # Define the group keys
+    group_cols = ['Parent_employer_name', 'Subsidary_employer_name', 'Designation', 'Country']
     
-    # Post-tax Inference Metadata (Net-down)
-    m_post_rate = f'{meta_prefix}_PostTax_Rate'
-    m_post_url = f'{meta_prefix}_PostTax_URL'
-    m_post_desc = f'{meta_prefix}_PostTax_Source_Desc'
+    # Define column sets for processing
+    income_sets = {
+        'Primary': ['Primary_income_pretax', 'Primary_income_posttax', 'Primary_income_currency'],
+        'Client': ['Client_declared_pretax', 'Client_declared_posttax', 'Client_declared_currency']
+    }
+
+    def process_group(group):
+        # 1. Sort by Start_employment to ensure chronological remarks
+        group = group.sort_values('Start_employment')
+        
+        res = {}
+        group_remarks = []
+
+        # 2. Financial Aggregation Logic
+        for prefix, cols in income_sets.items():
+            pre, post, curr = cols
+            
+            # Totals
+            res[f'Total_{prefix}_Pretax'] = group[pre].sum()
+            res[f'Total_{prefix}_Posttax'] = group[post].sum()
+            
+            # Annualized Averages (Normalized for months where specific income exists)
+            pre_tenure = group.loc[group[pre].notnull(), 'row_tenure_months'].sum()
+            res[f'Annualized_Avg_{prefix}_Pretax'] = (group[pre].sum() / pre_tenure * 12) if pre_tenure > 0 else np.nan
+            
+            post_tenure = group.loc[group[post].notnull(), 'row_tenure_months'].sum()
+            res[f'Annualized_Avg_{prefix}_Posttax'] = (group[post].sum() / post_tenure * 12) if post_tenure > 0 else np.nan
+
+        # 3. Interwoven Remarks Logic (Row by Row)
+        for _, row in group.iterrows():
+            row_notes = []
+            
+            # Order: Primary Inflation -> Client Inflation -> Primary Tax -> Client Tax
+            remark_targets = [
+                'Primary_Inflation_Remarks', 
+                'Client_Inflation_Remarks',
+                'Primary_Tax_Inference_Remarks', 
+                'Client_Tax_Inference_Remarks'
+            ]
+            
+            for col in remark_targets:
+                if col in row and pd.notnull(row[col]):
+                    row_notes.append(str(row[col]))
+            
+            if row_notes:
+                group_remarks.append("\n".join(row_notes))
+
+        # Combine all row remarks into one block for the group
+        res['rm_assist_remarks'] = "\n\n".join(group_remarks)
+        return pd.Series(res)
+
+    # Execute GroupBy
+    final_summary = df_copy.groupby(group_cols, observed=True).apply(process_group).reset_index()
     
-    remark_col = f'{meta_prefix}_Tax_Inference_Remarks'
-
-    def construct_statement(row):
-        currency = row[curr_col]
-        
-        # Scenario 1: Pre-tax was inferred from Post-tax
-        if pd.notnull(row.get(m_pre_rate)):
-            rate = row[m_pre_rate] * 100
-            source = row[m_pre_desc]
-            url = row[m_pre_url]
-            return (f"Income during tenure was reported as {currency} {row[post_col]:,.2f} (post-tax) "
-                    f"which is converted to its pre-tax equivalent ({currency} {row[pre_col]:,.2f}) "
-                    f"applying a {rate:.2f}% tax rate sourced from {source} ({url}).")
-
-        # Scenario 2: Post-tax was inferred from Pre-tax
-        elif pd.notnull(row.get(m_post_rate)):
-            rate = row[m_post_rate] * 100
-            source = row[m_post_desc]
-            url = row[m_post_url]
-            return (f"Income during tenure was reported as {currency} {row[pre_col]:,.2f} (pre-tax) "
-                    f"which is converted to its post-tax equivalent ({currency} {row[post_col]:,.2f}) "
-                    f"applying a {rate:.2f}% tax rate sourced from {source} ({url}).")
-        
-        return np.nan
-
-    df_copy[remark_col] = df_copy.apply(construct_statement, axis=1)
-    return df_copy
+    return final_summary
