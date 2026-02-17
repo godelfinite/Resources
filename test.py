@@ -4,7 +4,7 @@ import numpy as np
 def generate_final_summary(df):
     """
     Groups data by employer and consolidates financial totals, date ranges, 
-    total tenure, and a professional narrative of audit remarks.
+    tenure, and a professional narrative, maintaining distinct primary and client currencies.
     """
     df_copy = df.copy()
     group_cols = ['Parent_employer_name', 'Subsidary_employer_name', 'Designation', 'Country']
@@ -16,7 +16,7 @@ def generate_final_summary(df):
     }
 
     def process_group(group):
-        # 1. Internal Date Conversion for accurate min/max
+        # 1. Internal Date Conversion for accurate min/max (does not affect source df)
         s_dates = pd.to_datetime(group['Start_employment'], errors='coerce')
         e_dates = pd.to_datetime(group['End_employment'], errors='coerce')
         
@@ -29,15 +29,7 @@ def generate_final_summary(df):
         res['Employment_End'] = e_dates.max().strftime('%m-%Y') if e_dates.max() else None
         res['Total_Tenure_Months'] = group['row_tenure_months'].sum()
 
-        # Capture Currency (taking the first available, as groups share a currency)
-        # We check both Primary and Client sets
-        res['Group_Currency'] = (
-            group['Primary_income_currency'].dropna().iloc[0] if not group['Primary_income_currency'].dropna().empty 
-            else group['Client_declared_currency'].dropna().iloc[0] if not group['Client_declared_currency'].dropna().empty 
-            else "N/A"
-        )
-
-        # Narrative Setup
+        # Metadata for Headers
         parent = group['Parent_employer_name'].iloc[0]
         sub = group['Subsidary_employer_name'].iloc[0]
         des = group['Designation'].iloc[0]
@@ -47,9 +39,14 @@ def generate_final_summary(df):
         group_remarks.append(f"**Role:** {des} | **Location:** {country}")
         group_remarks.append(f"**Overall Tenure:** {res['Employment_Start']} to {res['Employment_End']} ({res['Total_Tenure_Months']} months)\n")
 
-        # 2. Financial Aggregation
+        # 2. Financial Aggregation & Currency Tracking
         for prefix, cols in income_sets.items():
             pre, post, curr = cols
+            
+            # Capture the currency for this set
+            res[f'{prefix}_Currency'] = group[curr].dropna().iloc[0] if not group[curr].dropna().empty else "N/A"
+            
+            # Totals
             res[f'Total_{prefix}_Pretax'] = group[pre].sum()
             res[f'Total_{prefix}_Posttax'] = group[post].sum()
             
@@ -85,8 +82,9 @@ def generate_final_summary(df):
     # Execute GroupBy
     final_summary = df_copy.groupby(group_cols, observed=True).apply(process_group).reset_index()
     
-    # Column Reordering for a cleaner report
-    fixed_cols = group_cols + ['Employment_Start', 'Employment_End', 'Total_Tenure_Months', 'Group_Currency']
-    rest_cols = [c for c in final_summary.columns if c not in fixed_cols]
+    # Organize columns logically: IDs -> Dates/Tenure -> Primary Financials -> Client Financials -> Narrative
+    core_cols = group_cols + ['Employment_Start', 'Employment_End', 'Total_Tenure_Months']
+    primary_cols = ['Primary_Currency', 'Total_Primary_Pretax', 'Annualized_Avg_Primary_Pretax', 'Total_Primary_Posttax', 'Annualized_Avg_Primary_Posttax']
+    client_cols = ['Client_Currency', 'Total_Client_Pretax', 'Annualized_Avg_Client_Pretax', 'Total_Client_Posttax', 'Annualized_Avg_Client_Posttax']
     
-    return final_summary[fixed_cols + rest_cols]
+    return final_summary[core_cols + primary_cols + client_cols + ['rm_assist_remarks']]
