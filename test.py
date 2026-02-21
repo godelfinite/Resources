@@ -1,6 +1,45 @@
 import markdown
 
 # 1. Define the Dark Mode CSS
+light_wide_style = """
+<style>
+    body {
+        background-color: #ffffff;
+        color: #000000;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+        line-height: 1.5;
+        padding: 20px;
+        margin: 0;
+        width: 100%; /* Ensures full screen usage */
+    }
+    h1, h2, h3 {
+        border-bottom: 1px solid #eaecef;
+        padding-bottom: 0.3em;
+    }
+    table {
+        border-collapse: collapse;
+        width: 100%; /* Table expands to full container width */
+        margin: 20px 0;
+        font-size: 14px;
+    }
+    th, td {
+        border: 1px solid #d0d7de;
+        padding: 10px;
+        text-align: left;
+    }
+    th {
+        background-color: #f6f8fa;
+        font-weight: 600;
+    }
+    tr:nth-child(even) {
+        background-color: #f9f9f9;
+    }
+    /* Simple responsiveness for very small screens */
+    @media (max-width: 768px) {
+        body { padding: 10px; }
+    }
+</style>
+"""
 dark_style = """
 <style>
     body {
