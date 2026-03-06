@@ -23,6 +23,7 @@ TEMPLATE = r"""
         .header-main { margin-bottom: 25px; border-bottom: 2px solid var(--border); padding-bottom: 15px; }
         .header-main h1 { margin: 0; font-size: 2rem; font-weight: 800; }
         h2.section-title { margin: 40px 0 15px; font-size: 1rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-sub); border-bottom: 2px solid var(--border); padding-bottom: 10px; }
+        
         .summary-content { background: white; border: 1px solid var(--border); padding: 25px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
 
         .placard { background: white; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 20px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
@@ -33,8 +34,10 @@ TEMPLATE = r"""
         .type-GAP { border-left: 10px solid var(--gap); }
         .type-ADDITIONAL_NOTES { border-left: 10px solid var(--notes); }
 
+        .header-titles { display: flex; flex-direction: column; }
         .parent-name { font-weight: 900; font-size: 1.25rem; }
-        .accessibility-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--text-sub); margin-top: 4px; }
+        .type-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--text-sub); margin-top: 2px; letter-spacing: 0.5px; }
+
         .p-content { padding: 0 28px 28px; border-top: 1px solid #f1f5f9; }
         .hidden { display: none; }
         .role-title { font-weight: 700; color: var(--text-main); font-size: 1.15rem; margin: 25px 0 12px 0; display: block; border-left: 4px solid #e2e8f0; padding-left: 12px; }
@@ -48,9 +51,9 @@ TEMPLATE = r"""
         .expanded > .p-header .chevron, .expanded > .sub-toggle .chevron { transform: rotate(180deg); }
 
         blockquote { margin: 12px 0 0 0; padding: 18px 24px; border-left: 6px solid; border-radius: 0 10px 10px 0; font-size: 0.98rem; outline: none; }
-        .resp-quote { background: #f0fdf4; border-color: #22c55e; color: #14532d; }
-        .obs-quote { background: #fffbeb; border-color: #f59e0b; color: #78350f; }
-        .qc-quote { background: #fff1f2; border-color: #be123c; color: #881337; }
+        .resp-quote { border-color: #22c55e; background: #f0fdf4; color: #14532d; }
+        .obs-quote { border-color: #f59e0b; background: #fffbeb; color: #78350f; }
+        .qc-quote { border-color: #be123c; background: #fff1f2; color: #881337; }
 
         .source-tag { display: inline-block; background: #f1f5f9; color: #475569; font-size: 0.8rem; padding: 4px 10px; border-radius: 6px; margin: 5px 6px 0 0; border: 1px solid #cbd5e1; font-weight: 500; }
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
@@ -58,16 +61,13 @@ TEMPLATE = r"""
         .label { color: var(--text-sub); width: 40%; font-weight: 600; }
         
         .btn-edit { float: right; margin-top: 25px; font-size: 0.85rem; padding: 8px 18px; cursor: pointer; background: #fff; border: 1px solid var(--border); border-radius: 8px; font-weight: 700; }
-        
         input { width: 100%; border: 1px solid transparent; background: transparent; font-size: inherit; font-family: inherit; color: inherit; outline: none; }
         
-        /* Edit State Highlight */
         .editable { 
             border: 1px solid var(--border) !important; 
             background: #fff !important; 
             border-radius: 4px; 
             padding: 4px 8px !important; 
-            box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
         }
     </style>
 </head>
@@ -104,30 +104,12 @@ TEMPLATE = r"""
         data.timeline_entries.forEach(e => {
             let rows = "";
             const currentType = e.entry_type;
-            const fields = config[currentType === "EQUITY_COMPENSATION" ? "EQUITY_COMPENSATION" : currentType] || [];
+            const fields = config[currentType] || [];
             
-            // Render Config Fields
             fields.forEach(([key, label]) => {
                 const val = getNested(e, key);
                 rows += `<tr><td class="label">${label}</td><td><input type="text" value="${val || ''}" disabled></td></tr>`;
             });
-
-            // specialized Income Concatenation Logic
-            if(currentType === "EMPLOYMENT") {
-                const incomeSets = [
-                    { label: "Annualized Avg Client Pretax", data: e.client_declared_income },
-                    { label: "Annualized Avg Primary Pretax", data: e.primary_corroboration_income },
-                    { label: "Annualized Avg Secondary Corroboration income Pretax Lower", data: e.secondary_corroboration_income, key: 'annualized_pretax_low' },
-                    { label: "Annualized Avg Secondary Corroboration income Pretax Higher", data: e.secondary_corroboration_income, key: 'annualized_pretax_high' }
-                ];
-
-                incomeSets.forEach(set => {
-                    const currency = set.data?.currency || "";
-                    const value = set.data?.[set.key || 'annualized_pretax'] || "";
-                    const displayVal = (currency || value) ? `${currency} ${value}`.trim() : "";
-                    rows += `<tr><td class="label">${set.label}</td><td><input type="text" value="${displayVal}" disabled></td></tr>`;
-                });
-            }
 
             const docs = e.source_documents || e.source_attribution || [];
             if(docs.length > 0) {
@@ -139,12 +121,14 @@ TEMPLATE = r"""
             if (currentType === "GAP") hTitle = `GAP PERIOD ${++gapCounter}`;
             if (currentType === "ADDITIONAL_NOTES") hTitle = "RM/FO NOTES";
 
+            let typeLabel = currentType.replace('_', ' ');
+
             timeline.innerHTML += `
                 <div class="placard type-${currentType}">
                     <div class="p-header" onclick="toggleParent(this)">
                         <div class="header-titles">
-                            <span class="parent-name" style="color:var(--${currentType.toLowerCase().split('_')[0]}-accent)">${hTitle}</span>
-                            <span class="accessibility-label">${currentType.replace('_', ' ')}</span>
+                            <span class="parent-name">${hTitle}</span>
+                            <span class="type-label">${typeLabel}</span>
                         </div>
                         <span class="chevron">▼</span>
                     </div>
@@ -155,7 +139,7 @@ TEMPLATE = r"""
                         ${createBlock("Responsibility", e.responsibility, "resp-quote")}
                         ${createBlock("Agent Observations", e.observations_by_agent, "obs-quote")}
                         ${createBlock("QC Assessment", e.qc_assessment, "qc-quote")}
-                        ${createBlock("Income Attribution", e.client_declared_income?.income_attribution_remarks, "obs-quote")}
+                        ${createBlock("Income Attribution", e.client_declared_income?.income_attribution_remarks || e.primary_corroboration_income?.income_attribution_remarks || e.secondary_corroboration_income?.income_attribution_remarks, "obs-quote")}
                     </div>
                 </div>`;
         });
