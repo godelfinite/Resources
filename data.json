@@ -1,0 +1,57 @@
+{
+    "customer_name": "Jane Smith",
+    "timeline_span": "Mar 2018 to Nov 2023",
+    "total_career_duration": "5 years 8 months",
+    "employment_summary": "Seasoned professional with a background in Document AI and Fintech compliance. Expert in scaling automated verification systems.",
+    "timeline_entries": [
+        {
+            "entry_type": "EMPLOYMENT",
+            "parent_company": "ABC Corporation",
+            "subsidiary": "Tech Solutions",
+            "role": "Senior Analyst",
+            "country": "USA",
+            "dates": "Mar 2018 - Dec 2020",
+            "client_declared_income": { "annualized_pretax": "$120,000" },
+            "responsibilities": "Managed the migration of legacy data to Cloud systems."
+        },
+        {
+            "entry_type": "EMPLOYMENT",
+            "parent_company": "XYZ Global",
+            "subsidiary": "Risk & Compliance",
+            "role": "Lead Data Scientist",
+            "country": "UK",
+            "dates": "Jan 2021 - Jan 2023",
+            "client_declared_income": { "annualized_pretax": "£95,000" },
+            "primary_corroboration_income": { "annualized_pretax": "£98,500" },
+            "responsibilities": "Developed automated verification pipelines for Document AI.",
+            "observation": "Corroborated income is 3.6% higher than declared."
+        },
+        {
+            "entry_type": "EQUITY",
+            "employer": "ABC Corporation",
+            "stock_options_value": "5000",
+            "currency": "USD"
+        },
+        {
+            "entry_type": "EQUITY",
+            "employer": "XYZ Global",
+            "stock_options_value": "12500",
+            "currency": "GBP",
+            "observation": "Options are fully vested."
+        },
+        {
+            "entry_type": "GAP",
+            "dates": "Feb 2023 - May 2023",
+            "gap_justification_remarks": "Sabbatical for professional training."
+        },
+        {
+            "entry_type": "GAP",
+            "dates": "June 2023 - Nov 2023",
+            "gap_justification_remarks": "Relocation period."
+        },
+        {
+            "entry_type": "ADDITIONAL_NOTES",
+            "notes": "Candidate holds 2X USPTO patents."
+        }
+    ]
+}
