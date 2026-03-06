@@ -1,7 +1,11 @@
 import json
 import os
 import webbrowser
+
+# Import the configuration from config.py
+
 from config import TABLE_CONFIG
+
 
 INPUT_FILE = 'data.json'
 OUTPUT_FILE = 'placards.html'
@@ -22,6 +26,7 @@ TEMPLATE = r"""
         .container { width: 96%; max-width: 1800px; margin: 0 auto; }
         .header-main { margin-bottom: 25px; border-bottom: 2px solid var(--border); padding-bottom: 15px; }
         .header-main h1 { margin: 0; font-size: 2rem; font-weight: 800; }
+        
         h2.section-title { margin: 40px 0 15px; font-size: 1rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-sub); border-bottom: 2px solid var(--border); padding-bottom: 10px; }
         
         .summary-content { background: white; border: 1px solid var(--border); padding: 25px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
@@ -63,12 +68,14 @@ TEMPLATE = r"""
         .btn-edit { float: right; margin-top: 25px; font-size: 0.85rem; padding: 8px 18px; cursor: pointer; background: #fff; border: 1px solid var(--border); border-radius: 8px; font-weight: 700; }
         input { width: 100%; border: 1px solid transparent; background: transparent; font-size: inherit; font-family: inherit; color: inherit; outline: none; }
         
+        /* Edit State Highlight */
         .editable { 
             border: 1px solid var(--border) !important; 
             background: #fff !important; 
             border-radius: 4px; 
             padding: 4px 8px !important; 
         }
+        blockquote.editable { border: 1px solid var(--border); border-left: 6px solid; }
     </style>
 </head>
 <body>
@@ -119,16 +126,13 @@ TEMPLATE = r"""
 
             let hTitle = e.parent_company || e.employer;
             if (currentType === "GAP") hTitle = `GAP PERIOD ${++gapCounter}`;
-            if (currentType === "ADDITIONAL_NOTES") hTitle = "RM/FO NOTES";
-
-            let typeLabel = currentType.replace('_', ' ');
 
             timeline.innerHTML += `
                 <div class="placard type-${currentType}">
                     <div class="p-header" onclick="toggleParent(this)">
                         <div class="header-titles">
                             <span class="parent-name">${hTitle}</span>
-                            <span class="type-label">${typeLabel}</span>
+                            <span class="type-label">${currentType.replace('_', ' ')}</span>
                         </div>
                         <span class="chevron">▼</span>
                     </div>
@@ -139,12 +143,16 @@ TEMPLATE = r"""
                         ${createBlock("Responsibility", e.responsibility, "resp-quote")}
                         ${createBlock("Agent Observations", e.observations_by_agent, "obs-quote")}
                         ${createBlock("QC Assessment", e.qc_assessment, "qc-quote")}
-                        ${createBlock("Income Attribution", e.client_declared_income?.income_attribution_remarks || e.primary_corroboration_income?.income_attribution_remarks || e.secondary_corroboration_income?.income_attribution_remarks, "obs-quote")}
+                        ${createBlock("Client Income Attribution", e.client_declared_income?.income_attribution_remarks, "obs-quote")}
+                        ${createBlock("Primary Income Attribution", e.primary_corroboration_income?.income_attribution_remarks, "obs-quote")}
                     </div>
                 </div>`;
         });
 
-        (data.additional_profile_notes || []).forEach(n => {
+        // Single object handling for Additional Notes
+        if (data.additional_profile_notes) {
+            const n = data.additional_profile_notes;
+            const docHtml = (n.source_documents || []).map(d => `<span class="source-tag">📄 ${d}</span>`).join('');
             notesCont.innerHTML += `
                 <div class="placard type-ADDITIONAL_NOTES">
                     <div class="p-header" onclick="toggleParent(this)">
@@ -153,10 +161,13 @@ TEMPLATE = r"""
                     </div>
                     <div class="p-content hidden">
                         <button class="btn-edit" onclick="toggleEdit(this)">Edit Values</button>
-                        <table><tr><td class="label">Note</td><td><input type="text" value="${n.notes}" disabled></td></tr></table>
+                        <table>
+                            <tr><td class="label">Note</td><td><input type="text" value="${n.notes || ''}" disabled></td></tr>
+                            <tr><td class="label">Source Attribution</td><td>${docHtml}</td></tr>
+                        </table>
                     </div>
                 </div>`;
-        });
+        }
     }
 
     function createBlock(title, text, style) {
@@ -195,10 +206,16 @@ TEMPLATE = r"""
 """
 
 def main():
-    if not os.path.exists(INPUT_FILE): return
-    with open(INPUT_FILE, 'r', encoding='utf-8') as f: data = json.load(f)
-    html = TEMPLATE.replace("{{DATA_JSON}}", json.dumps(data)).replace("{{CONFIG}}", json.dumps(TABLE_CONFIG))
-    with open(OUTPUT_FILE, 'w', encoding='utf-8') as f: f.write(html)
+    if not os.path.exists(INPUT_FILE):
+        print(f"Error: {INPUT_FILE} not found.")
+        return
+    with open(INPUT_FILE, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    final_html = TEMPLATE.replace("{{DATA_JSON}}", json.dumps(data, indent=4)).replace("{{CONFIG}}", json.dumps(TABLE_CONFIG, indent=4))
+    with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
+        f.write(final_html)
+    print(f"✅ Success: {OUTPUT_FILE} created.")
     webbrowser.open('file://' + os.path.realpath(OUTPUT_FILE))
 
-if __name__ == "__main__": main()
+if __name__ == "__main__":
+    main()
