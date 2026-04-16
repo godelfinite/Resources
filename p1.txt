@@ -1,30 +1,22 @@
-### ROLE
-You are a specialized Financial Data Extraction Agent. Your task is to analyze "Investment Chronology" markdown text and prepare structured data for FX (Foreign Exchange) conversion.
+from typing import List, Optional, Union
+from pydantic import BaseModel, Field
 
-### INPUT DATA
-1. Reference Currency: {ref_currency}
-2. Investment Chronology Text: 
-{chrono_text}
+class FXInputItem(BaseModel):
+    asset_class: str = Field(description="The category of investment, e.g., Equities, Real Estate")
+    is_fx_required: bool = Field(description="True if documented currency differs from reference currency and sufficient data exists")
+    
+    # Financial Details
+    documented_currency: Optional[str] = Field(None, description="The currency found in the text (e.g., USD)")
+    reference_currency: Optional[str] = Field(None, description="The target currency (e.g., SGD)")
+    
+    # Temporal Logic
+    year_start: Optional[int] = Field(None, description="The start year for calculation")
+    year_end: Optional[int] = Field(None, description="The end year. Matches year_start if single year.")
+    is_tenure_average: bool = Field(description="True if this represents a range/tenure requiring an average rate")
+    
+    # Context for Remarks
+    gain_amount: Optional[str] = Field(None, description="The raw gain string, e.g., '+USD 546k'")
+    asset_description: Optional[str] = Field(None, description="Brief context of the asset section")
 
-### EXTRACTION LOGIC & RULES
-For every "Net SOW calculation" subsection found under each Asset Class, follow these rules:
-
-1. **Identify FX Necessity**: Set `is_fx_required` to TRUE only if:
-   - A gain amount is documented in a currency OTHER than {ref_currency}.
-   - The documented currency and the year/tenure are explicitly mentioned.
-   - If currencies match or information is missing, set to FALSE.
-
-2. **Intelligent Segmentation (CRITICAL)**:
-   - **Scenario A (Breakdown)**: If the text lists individual years (e.g., "2021: +USD 1M, 2022: +USD 2M"), create a SEPARATE entry for each year. Set `year_start` and `year_end` to the same integer. Set `is_tenure_average` to FALSE.
-   - **Scenario B (Cumulative/Tenure)**: If the text provides a single gain for a range (e.g., "Total gains for 2020-2023: USD 5M"), create ONE entry. Set `year_start` and `year_end` accordingly. Set `is_tenure_average` to TRUE.
-   - **Scenario C (Mixed)**: If the text has both (e.g., "2020: $1M; and for 2021-2023: $4M"), create one entry for the specific year and one entry for the tenure.
-
-3. **Data Context**:
-   - Capture the `asset_class` and `asset_description` so the remarks can be mapped back correctly.
-   - The `gain_amount` should be the raw string from the text (e.g., "+USD 546k").
-
-### OUTPUT FORMAT
-{format_instructions}
-
-### FINAL CHECK
-Ensure all years are returned as integers. Do not include sections where no gain data is found.
+class SOWExtraction(BaseModel):
+    sections: List[FXInputItem] = Field(description="List of all identified gain components across all asset classes")
